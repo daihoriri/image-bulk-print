@@ -429,16 +429,12 @@ class ImageBulkPrinter:
         try:
             h = win32print.OpenPrinter(name)
             try:
-                info = win32print.GetPrinter(h, 2)
-                dm = info["pDevMode"]
+                dm = win32print.GetPrinter(h, 2)["pDevMode"]
                 result = win32print.DocumentProperties(
                     self.root.winfo_id(), h, name, dm, dm,
                     win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER | win32con.DM_IN_PROMPT)
                 if result == 1:
-                    self.devmode = dm
-                    # OKを押したら即座にプリンターのデフォルト設定に反映する
-                    info["pDevMode"] = dm
-                    win32print.SetPrinter(h, 2, info, 0)
+                    self.devmode = dm  # このジョブ専用として保持（グローバル設定は変えない）
             finally:
                 win32print.ClosePrinter(h)
         except Exception as e:
@@ -452,34 +448,35 @@ class ImageBulkPrinter:
         PreviewWindow(self.root, selected)
 
     # ───────────────────────────────────────────────── 印刷 ──
-    def _set_printer_orientation(self, printer_name: str, orientation: int):
-        try:
-            h = win32print.OpenPrinter(printer_name)
-            try:
-                info = win32print.GetPrinter(h, 2)
-                dm = info["pDevMode"]
-                dm.Orientation = orientation
-                win32print.DocumentProperties(
-                    0, h, printer_name, dm, dm,
-                    win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER)
-                info["pDevMode"] = dm
-                win32print.SetPrinter(h, 2, info, 0)
-            finally:
-                win32print.ClosePrinter(h)
-        except Exception:
-            pass
-
     def _print_image(self, image_path: str, printer_name: str):
         img = Image.open(image_path).convert("RGB")
         is_landscape = img.width > img.height
 
-        self._set_printer_orientation(
-            printer_name,
-            DMORIENT_LANDSCAPE if is_landscape else DMORIENT_PORTRAIT
-        )
-
         hdc = win32ui.CreateDC()
         hdc.CreatePrinterDC(printer_name)
+
+        # このジョブ専用の設定を構築（プリンターのグローバル設定は一切変更しない）
+        try:
+            h = win32print.OpenPrinter(printer_name)
+            try:
+                dm = win32print.GetPrinter(h, 2)["pDevMode"]
+            finally:
+                win32print.ClosePrinter(h)
+        except Exception:
+            dm = self.devmode
+
+        # 印刷プロパティで変更した設定（白黒など）を適用
+        if self.devmode is not None:
+            dm = self.devmode
+
+        # 画像の向きに合わせて縦横を上書き
+        dm.Orientation = DMORIENT_LANDSCAPE if is_landscape else DMORIENT_PORTRAIT
+
+        # ResetDC: このDC（印刷ジョブ）だけに設定を適用 → 他アプリに影響しない
+        try:
+            hdc.ResetDC(dm)
+        except Exception:
+            pass
 
         pw = hdc.GetDeviceCaps(win32con.HORZRES)
         ph = hdc.GetDeviceCaps(win32con.VERTRES)
