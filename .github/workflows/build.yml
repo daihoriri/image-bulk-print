@@ -22,9 +22,12 @@ jobs:
         run: |
           pip install pillow pywin32 pyinstaller
 
+      - name: Generate printer icon
+        run: python make_icon.py
+
       - name: Build EXE
         run: |
-          pyinstaller --onefile --windowed --name "画像一括印刷" print_app.py
+          pyinstaller --onefile --windowed --name "画像一括印刷" --icon=printer_icon.ico print_app.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
