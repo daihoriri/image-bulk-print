@@ -345,6 +345,7 @@ class ImageBulkPrinter:
         btn_frame.grid(row=3, column=0, pady=12)
         ttk.Button(btn_frame, text="プレビュー確認", command=self._open_preview, width=18).pack(side="left", padx=8)
         ttk.Button(btn_frame, text="一括印刷",       command=self._print_all,    width=14).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="PDF出力",        command=self._export_pdf,   width=12).pack(side="left", padx=8)
         ttk.Button(btn_frame, text="終了",           command=self.root.quit,     width=10).pack(side="left", padx=8)
 
         self._update_sel_label()
@@ -546,6 +547,118 @@ class ImageBulkPrinter:
             messagebox.showerror("印刷エラー", "以下の画像で印刷に失敗しました:\n\n" + "\n".join(errors))
         else:
             messagebox.showinfo("完了", f"{len(targets)} 枚の印刷が完了しました。")
+
+    # ──────────────────────────────────────────────── PDF出力 ──
+    def _export_pdf(self):
+        targets = self._current_view().get_selected()
+        if not targets:
+            messagebox.showwarning("警告", "画像が選択されていません。"); return
+
+        # 保存先を選択
+        save_path = filedialog.asksaveasfilename(
+            title="PDFの保存先を選択",
+            defaultextension=".pdf",
+            filetypes=[("PDF ファイル", "*.pdf")],
+            initialfile="output.pdf",
+        )
+        if not save_path:
+            return
+
+        # A4サイズ（ポイント単位: 1pt = 1/72inch）
+        A4_W_PT = 595.27
+        A4_H_PT = 841.89
+        MARGIN_PT = MARGIN_MM / 25.4 * 72  # 5mm → pt
+
+        prog = tk.Toplevel(self.root)
+        prog.title("PDF出力中...")
+        prog.geometry("440x130")
+        prog.resizable(False, False)
+        prog.grab_set()
+        ttk.Label(prog, text="PDFを作成しています...").pack(pady=(12, 4))
+        bar = ttk.Progressbar(prog, maximum=len(targets), mode="determinate")
+        bar.pack(fill="x", padx=20, pady=4)
+        status = ttk.Label(prog, text="")
+        status.pack()
+
+        errors = []
+        pdf_pages: list[Image.Image] = []
+
+        for i, path in enumerate(targets):
+            fname = os.path.basename(path)
+            status.config(text=f"{fname}  ({i + 1} / {len(targets)})")
+            prog.update()
+            try:
+                img = Image.open(path).convert("RGB")
+                is_landscape = img.width > img.height
+
+                # ページサイズ（向き自動）
+                if is_landscape:
+                    page_w, page_h = A4_H_PT, A4_W_PT   # 横
+                else:
+                    page_w, page_h = A4_W_PT, A4_H_PT   # 縦
+
+                avail_w = page_w - 2 * MARGIN_PT
+                avail_h = page_h - 2 * MARGIN_PT
+
+                ratio = img.width / img.height
+                area_ratio = avail_w / avail_h
+                if ratio > area_ratio:
+                    new_w_pt, new_h_pt = avail_w, avail_w / ratio
+                else:
+                    new_h_pt, new_w_pt = avail_h, avail_h * ratio
+
+                # pt → px（PDF解像度 150dpi）
+                DPI = 150
+                PT_TO_PX = DPI / 72
+                new_w_px = max(1, int(new_w_pt * PT_TO_PX))
+                new_h_px = max(1, int(new_h_pt * PT_TO_PX))
+                page_w_px = int(page_w * PT_TO_PX)
+                page_h_px = int(page_h * PT_TO_PX)
+                margin_px = int(MARGIN_PT * PT_TO_PX)
+
+                img_resized = img.resize((new_w_px, new_h_px), Image.LANCZOS)
+
+                # 白紙ページに中央配置
+                page_img = Image.new("RGB", (page_w_px, page_h_px), "white")
+                x0 = margin_px + (int(avail_w * PT_TO_PX) - new_w_px) // 2
+                y0 = margin_px + (int(avail_h * PT_TO_PX) - new_h_px) // 2
+                page_img.paste(img_resized, (x0, y0))
+                pdf_pages.append(page_img)
+
+            except Exception as e:
+                errors.append(f"{fname}: {e}")
+            bar["value"] = i + 1
+            prog.update()
+
+        prog.destroy()
+
+        if not pdf_pages:
+            messagebox.showerror("エラー", "PDFを作成できる画像がありませんでした。")
+            return
+
+        try:
+            pdf_pages[0].save(
+                save_path,
+                format="PDF",
+                save_all=True,
+                append_images=pdf_pages[1:],
+                resolution=150,
+            )
+        except Exception as e:
+            messagebox.showerror("エラー", f"PDF保存に失敗しました:\n{e}")
+            return
+
+        if errors:
+            messagebox.showwarning(
+                "PDF出力完了（一部エラー）",
+                f"PDFを保存しました。\n{save_path}\n\n"
+                f"以下の画像は取り込めませんでした:\n" + "\n".join(errors),
+            )
+        else:
+            messagebox.showinfo(
+                "PDF出力完了",
+                f"{len(pdf_pages)} ページのPDFを保存しました。\n\n{save_path}",
+            )
 
 
 # ──────────────────────────────────────────────────────────────── main ──
