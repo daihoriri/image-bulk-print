@@ -78,7 +78,7 @@ def main():
         sizes=[(sz, sz) for sz in sizes],
         append_images=images[1:],
     )
-    print("printer_icon.ico を生成しました")
+    print("printer_icon.ico generated.")
 
 
 if __name__ == "__main__":
