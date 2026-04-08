@@ -429,11 +429,16 @@ class ImageBulkPrinter:
         try:
             h = win32print.OpenPrinter(name)
             try:
-                dm = win32print.GetPrinter(h, 2)["pDevMode"]
+                info = win32print.GetPrinter(h, 2)
+                dm = info["pDevMode"]
                 result = win32print.DocumentProperties(
                     self.root.winfo_id(), h, name, dm, dm,
                     win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER | win32con.DM_IN_PROMPT)
-                if result == 1: self.devmode = dm
+                if result == 1:
+                    self.devmode = dm
+                    # OKを押したら即座にプリンターのデフォルト設定に反映する
+                    info["pDevMode"] = dm
+                    win32print.SetPrinter(h, 2, info, 0)
             finally:
                 win32print.ClosePrinter(h)
         except Exception as e:
