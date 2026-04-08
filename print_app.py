@@ -607,8 +607,8 @@ class ImageBulkPrinter:
                 else:
                     new_h_pt, new_w_pt = avail_h, avail_h * ratio
 
-                # pt → px（PDF解像度 150dpi）
-                DPI = 150
+                # pt → px（PDF解像度 300dpi）
+                DPI = 300
                 PT_TO_PX = DPI / 72
                 new_w_px = max(1, int(new_w_pt * PT_TO_PX))
                 new_h_px = max(1, int(new_h_pt * PT_TO_PX))
@@ -642,7 +642,7 @@ class ImageBulkPrinter:
                 format="PDF",
                 save_all=True,
                 append_images=pdf_pages[1:],
-                resolution=150,
+                resolution=300,
             )
         except Exception as e:
             messagebox.showerror("エラー", f"PDF保存に失敗しました:\n{e}")
