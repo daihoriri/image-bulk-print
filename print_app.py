@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
 import json
+import sys
 
 try:
     from PIL import Image, ImageTk, ImageWin
@@ -16,7 +17,9 @@ SUPPORTED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif'
 MARGIN_MM = 5
 
 # 設定ファイル（exeと同じフォルダに保存）
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+# PyInstaller exe の場合は sys.executable、通常の .py 実行時は __file__ を使う
+_base_dir = os.path.dirname(sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(_base_dir, "settings.json")
 
 def load_config() -> dict:
     try:
