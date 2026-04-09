@@ -472,7 +472,7 @@ class ImageBulkPrinter:
 
         # CreateDC にdevmodeを直接渡す → このジョブだけに設定が適用される
         # SetPrinter / ResetDC は不要 → プリンターのグローバル設定を一切変更しない
-        hdc_handle = win32gui.CreateDC("WINSPOOL", printer_name, None, dm)
+        hdc_handle = win32gui.CreateDC("WINSPOOL", printer_name, dm)
         hdc = win32ui.CreateDCFromHandle(hdc_handle)
 
         pw = hdc.GetDeviceCaps(win32con.HORZRES)
