@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
+import json
 
 try:
     from PIL import Image, ImageTk, ImageWin
@@ -13,6 +14,23 @@ except ImportError:
 
 SUPPORTED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.tif')
 MARGIN_MM = 5
+
+# 設定ファイル（exeと同じフォルダに保存）
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
+def load_config() -> dict:
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_config(data: dict):
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 PREVIEW_SIZE = (400, 566)
 
 DMORIENT_PORTRAIT  = 1
@@ -193,6 +211,68 @@ class ThumbnailView(_ScrollableFrame):
     def count_selected(self) -> int: return sum(1 for _, v in self._items if v.get())
 
 
+# ───────────────────────────────────── 設定ダイアログ ────────────────────────────
+class SettingsDialog:
+    def __init__(self, parent, config: dict):
+        self.result = None
+        self._config = dict(config)
+
+        self.win = tk.Toplevel(parent)
+        self.win.title("初期フォルダ設定")
+        self.win.resizable(False, False)
+        self.win.grab_set()
+
+        self._image_dir = tk.StringVar(value=config.get("default_image_dir", ""))
+        self._pdf_dir   = tk.StringVar(value=config.get("default_pdf_dir",   ""))
+
+        pad = {"padx": 10, "pady": 6}
+
+        # 画像フォルダ
+        f1 = ttk.LabelFrame(self.win, text="画像フォルダの初期値", padding=10)
+        f1.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 4))
+        f1.columnconfigure(1, weight=1)
+        ttk.Entry(f1, textvariable=self._image_dir, width=48, state="readonly").grid(
+            row=0, column=0, sticky="ew", padx=(0, 8))
+        ttk.Button(f1, text="選択", command=self._pick_image_dir, width=6).grid(row=0, column=1)
+        ttk.Button(f1, text="クリア", command=lambda: self._image_dir.set(""), width=6).grid(
+            row=0, column=2, padx=(4, 0))
+
+        # PDF出力先
+        f2 = ttk.LabelFrame(self.win, text="PDF出力先の初期値", padding=10)
+        f2.grid(row=1, column=0, sticky="ew", padx=12, pady=4)
+        f2.columnconfigure(1, weight=1)
+        ttk.Entry(f2, textvariable=self._pdf_dir, width=48, state="readonly").grid(
+            row=0, column=0, sticky="ew", padx=(0, 8))
+        ttk.Button(f2, text="選択", command=self._pick_pdf_dir, width=6).grid(row=0, column=1)
+        ttk.Button(f2, text="クリア", command=lambda: self._pdf_dir.set(""), width=6).grid(
+            row=0, column=2, padx=(4, 0))
+
+        # OK / キャンセル
+        bf = ttk.Frame(self.win)
+        bf.grid(row=2, column=0, pady=12)
+        ttk.Button(bf, text="OK",         command=self._ok,     width=10).pack(side="left", padx=8)
+        ttk.Button(bf, text="キャンセル", command=self.win.destroy, width=10).pack(side="left", padx=8)
+
+    def _pick_image_dir(self):
+        d = filedialog.askdirectory(title="画像フォルダの初期値を選択",
+                                    initialdir=self._image_dir.get() or None)
+        if d:
+            self._image_dir.set(d)
+
+    def _pick_pdf_dir(self):
+        d = filedialog.askdirectory(title="PDF出力先の初期値を選択",
+                                    initialdir=self._pdf_dir.get() or None)
+        if d:
+            self._pdf_dir.set(d)
+
+    def _ok(self):
+        self.result = {
+            "default_image_dir": self._image_dir.get(),
+            "default_pdf_dir":   self._pdf_dir.get(),
+        }
+        self.win.destroy()
+
+
 # ───────────────────────────────────── プレビュー ─────────────────────────────
 class PreviewWindow:
     def __init__(self, parent, image_files: list[str]):
@@ -273,6 +353,7 @@ class ImageBulkPrinter:
         self.selected_printer = tk.StringVar()
         self.devmode = None
         self._view_mode = "list"   # "list" or "thumb"
+        self._config = load_config()
 
         if WINDOWS:
             try: self.selected_printer.set(win32print.GetDefaultPrinter())
@@ -343,10 +424,11 @@ class ImageBulkPrinter:
         # ボタン
         btn_frame = ttk.Frame(self.root)
         btn_frame.grid(row=3, column=0, pady=12)
-        ttk.Button(btn_frame, text="プレビュー確認", command=self._open_preview, width=18).pack(side="left", padx=8)
-        ttk.Button(btn_frame, text="一括印刷",       command=self._print_all,    width=14).pack(side="left", padx=8)
-        ttk.Button(btn_frame, text="PDF出力",        command=self._export_pdf,   width=12).pack(side="left", padx=8)
-        ttk.Button(btn_frame, text="終了",           command=self.root.quit,     width=10).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="プレビュー確認", command=self._open_preview,   width=18).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="一括印刷",       command=self._print_all,      width=14).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="PDF出力",        command=self._export_pdf,     width=12).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="初期値設定",     command=self._open_settings,  width=12).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="終了",           command=self.root.quit,       width=10).pack(side="left", padx=8)
 
         self._update_sel_label()
 
@@ -378,8 +460,17 @@ class ImageBulkPrinter:
             self._btn_thumb.state(["pressed"])
 
     # ─────────────────────────────────────── フォルダ・リスト ──
+    def _open_settings(self):
+        dlg = SettingsDialog(self.root, self._config)
+        self.root.wait_window(dlg.win)
+        if dlg.result is not None:
+            self._config.update(dlg.result)
+            save_config(self._config)
+            messagebox.showinfo("設定保存", "初期値を保存しました。")
+
     def _select_folder(self):
-        folder = filedialog.askdirectory(title="印刷する画像フォルダを選択")
+        initial = self._config.get("default_image_dir") or None
+        folder = filedialog.askdirectory(title="印刷する画像フォルダを選択", initialdir=initial)
         if folder:
             self.image_folder.set(folder)
             self._load_image_list(folder)
@@ -559,6 +650,7 @@ class ImageBulkPrinter:
             defaultextension=".pdf",
             filetypes=[("PDF ファイル", "*.pdf")],
             initialfile="output.pdf",
+            initialdir=self._config.get("default_pdf_dir") or None,
         )
         if not save_path:
             return
