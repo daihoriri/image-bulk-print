@@ -429,7 +429,9 @@ class ImageBulkPrinter:
         try:
             h = win32print.OpenPrinter(name)
             try:
-                dm = win32print.GetPrinter(h, 2)["pDevMode"]
+                # 保存済み設定があればそれを使う（毎回プリンターのデフォルトに戻さない）
+                dm = self.devmode if self.devmode is not None \
+                     else win32print.GetPrinter(h, 2)["pDevMode"]
                 result = win32print.DocumentProperties(
                     self.root.winfo_id(), h, name, dm, dm,
                     win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER | win32con.DM_IN_PROMPT)
