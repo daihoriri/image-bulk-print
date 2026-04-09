@@ -451,34 +451,29 @@ class ImageBulkPrinter:
 
     # ───────────────────────────────────────────────── 印刷 ──
     def _print_image(self, image_path: str, printer_name: str):
+        import win32gui
         img = Image.open(image_path).convert("RGB")
         is_landscape = img.width > img.height
 
-        hdc = win32ui.CreateDC()
-        hdc.CreatePrinterDC(printer_name)
-
-        # このジョブ専用の設定を構築（プリンターのグローバル設定は一切変更しない）
+        # このジョブ専用のdevmodeを組み立てる
+        # プロパティ設定があればそれを使い、なければプリンターのデフォルトを使う
         try:
             h = win32print.OpenPrinter(printer_name)
             try:
-                dm = win32print.GetPrinter(h, 2)["pDevMode"]
+                dm = self.devmode if self.devmode is not None \
+                     else win32print.GetPrinter(h, 2)["pDevMode"]
             finally:
                 win32print.ClosePrinter(h)
         except Exception:
             dm = self.devmode
 
-        # 印刷プロパティで変更した設定（白黒など）を適用
-        if self.devmode is not None:
-            dm = self.devmode
-
-        # 画像の向きに合わせて縦横を上書き
+        # 向きだけこのジョブ用に上書き
         dm.Orientation = DMORIENT_LANDSCAPE if is_landscape else DMORIENT_PORTRAIT
 
-        # ResetDC: このDC（印刷ジョブ）だけに設定を適用 → 他アプリに影響しない
-        try:
-            hdc.ResetDC(dm)
-        except Exception:
-            pass
+        # CreateDC にdevmodeを直接渡す → このジョブだけに設定が適用される
+        # SetPrinter / ResetDC は不要 → プリンターのグローバル設定を一切変更しない
+        hdc_handle = win32gui.CreateDC("WINSPOOL", printer_name, None, dm)
+        hdc = win32ui.CreateDCFromHandle(hdc_handle)
 
         pw = hdc.GetDeviceCaps(win32con.HORZRES)
         ph = hdc.GetDeviceCaps(win32con.VERTRES)
